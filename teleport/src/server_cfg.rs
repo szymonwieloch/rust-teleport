@@ -1,4 +1,4 @@
-use super::utils::exe_dir;
+use super::utils::open_cfg_file;
 use clap::Clap;
 use serde::Deserialize;
 use serde_yaml::from_reader;
@@ -21,14 +21,6 @@ pub struct Config {
 
 pub fn parse_config() -> Config {
     let opts = Opts::parse();
-    let cfg_path = match opts.config {
-        Some(ref path) => PathBuf::from(path),
-        None => {
-            let mut path_buf = exe_dir().expect("Could not obtain executable directory");
-            path_buf.push("teleport.yaml");
-            path_buf
-        }
-    };
-    let cfg_file = File::open(cfg_path).expect("Could not open configuration file");
+    let cfg_file = open_cfg_file(opts.config, "teleport.yaml");
     from_reader(cfg_file).expect("Could not parse configuration file")
 }
