@@ -1,0 +1,27 @@
+[package]
+name = "teleport"
+version = "0.1.0"
+authors = ["szymonwieloch <szymon.wieloch@gmail.com>"]
+edition = "2018"
+
+build = "build.rs"
+
+[dependencies]
+tonic = {version="0.4",  features = ["tls"] }
+prost = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+futures-core="0.3"
+tokio-stream="0.1"
+futures = "0.3"
+libc = "0.2"
+
+[build-dependencies]
+tonic-build = "0.4"
+
+[[bin]]
+name = "teleport"
+path = "src/server.rs"
+
+[[bin]]
+name = "telecli"
+path = "src/client.rs"

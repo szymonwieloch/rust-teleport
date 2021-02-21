@@ -1,8 +1,6 @@
 syntax = "proto3";
-package messages;
+package teleport;
 
-
-import "google/protobuf/duration.proto";
 
 service RemoteExecutor {
     rpc Start (Command) returns (StartedTask);
@@ -38,7 +36,7 @@ message Status {
 }
 
 message PendingTask{
-    google.protobuf.Duration runtime = 1;
+    int64 runtime = 1;
     //possibly more fields
 }
 
