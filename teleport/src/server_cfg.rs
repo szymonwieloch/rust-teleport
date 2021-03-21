@@ -2,9 +2,6 @@ use super::utils::open_cfg_file;
 use clap::Clap;
 use serde::Deserialize;
 use serde_yaml::from_reader;
-use std::fs::File;
-
-use std::path::PathBuf;
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
@@ -21,6 +18,6 @@ pub struct Config {
 
 pub fn parse_config() -> Config {
     let opts = Opts::parse();
-    let cfg_file = open_cfg_file(opts.config, "teleport.yaml");
+    let cfg_file = open_cfg_file(&opts.config, "teleport.yaml");
     from_reader(cfg_file).expect("Could not parse configuration file")
 }

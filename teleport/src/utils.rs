@@ -13,7 +13,7 @@ pub fn exe_dir() -> Result<PathBuf, std::io::Error> {
     Ok(path_buf)
 }
 
-pub fn open_cfg_file(path: Option<String>, default_file_name: &str) -> File {
+pub fn open_cfg_file(path: &Option<String>, default_file_name: &str) -> File {
     let cfg_path = match path {
         Some(ref path) => PathBuf::from(path),
         None => {

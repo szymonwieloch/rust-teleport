@@ -15,7 +15,7 @@ message TaskId {
 }
 
 message Command {
-    string command = 1;
+    repeated string command = 1;
 }
 
 message StartedTask {

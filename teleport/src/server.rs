@@ -12,7 +12,8 @@ use server_cfg::parse_config;
 
 #[allow(unused_variables)]
 fn interceptor(req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
-    todo!()
+    // todo!()
+    Ok(req)
 }
 
 #[tokio::main]
@@ -25,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         //         .client_ca_root(client_ca_cert),
         // )?
         .add_service(RemoteExecutorServer::with_interceptor(
-            RemoteExecutorImp {},
+            RemoteExecutorImp::new(),
             interceptor,
         ))
         .serve(config.addr.parse()?)

@@ -2,22 +2,19 @@ use super::utils::open_cfg_file;
 use clap::Clap;
 use serde::Deserialize;
 use serde_yaml::from_reader;
-use std::fs::File;
-
-use std::path::PathBuf;
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
-struct Opts {
+pub struct Opts {
     /// Sets a custom config file. By default <bin dir>/teleport.yaml is opened.
     #[clap(short, long)]
     pub config: Option<String>,
     #[clap(subcommand)]
-    subcmd: SubCommand,
+    pub subcmd: SubCommand,
 }
 
 #[derive(Clap)]
-enum SubCommand {
+pub enum SubCommand {
     Start(Start),
     Stop(Stop),
     Log(Log),
@@ -28,28 +25,28 @@ enum SubCommand {
 
 /// Starts a remote task
 #[derive(Clap)]
-struct Start {
+pub struct Start {
     /// Command to be ecexuted remotely
     pub cmd: Vec<String>,
 }
 
 /// Stops the remote task
 #[derive(Clap)]
-struct Stop {
+pub struct Stop {
     /// ID of the reomote task
     pub id: String,
 }
 
 ///Prints to the screen output of the remote task
 #[derive(Clap)]
-struct Log {
+pub struct Log {
     /// ID of the reomote task
     pub id: String,
 }
 
 ///Prints status of the remote task
 #[derive(Clap)]
-struct Status {
+pub struct Status {
     /// ID of the reomote task
     pub id: String,
 }
@@ -59,8 +56,11 @@ pub struct Config {
     pub addr: String,
 }
 
-pub fn parse_config() -> Config {
+pub fn parse_config() -> (Opts, Config) {
     let opts = Opts::parse();
-    let cfg_file = open_cfg_file(opts.config, "telecli.yaml");
-    from_reader(cfg_file).expect("Could not parse configuration file")
+    let cfg_file = open_cfg_file(&opts.config, "telecli.yaml");
+    (
+        opts,
+        from_reader(cfg_file).expect("Could not parse configuration file"),
+    )
 }
