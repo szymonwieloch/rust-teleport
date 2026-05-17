@@ -32,9 +32,7 @@ async fn send_start(
     mut client: RemoteExecutorClient<Channel>,
     start: Start,
 ) -> Result<(), tonic::Status> {
-    let cmd = Command {
-        command: start.cmd,
-    };
+    let cmd = Command { command: start.cmd };
     let resp = client.start(cmd).await?;
     let job = resp.into_inner();
     match &job.id {
@@ -52,9 +50,7 @@ async fn send_stop(
     mut client: RemoteExecutorClient<Channel>,
     stop: Stop,
 ) -> Result<(), tonic::Status> {
-    let resp = client
-        .stop(TaskId { uuid: stop.id })
-        .await?;
+    let resp = client.stop(TaskId { uuid: stop.id }).await?;
     let job = resp.into_inner();
     match job.details {
         Some(job_status::Details::Stopped(s)) => {
@@ -65,9 +61,7 @@ async fn send_stop(
     Ok(())
 }
 
-async fn send_list(
-    mut client: RemoteExecutorClient<Channel>,
-) -> Result<(), tonic::Status> {
+async fn send_list(mut client: RemoteExecutorClient<Channel>) -> Result<(), tonic::Status> {
     let resp = client.list(()).await?;
     let list = resp.into_inner();
 
@@ -77,10 +71,7 @@ async fn send_list(
     }
 
     println!("{:<36}  {:8}  {:4}  COMMAND", "JOB ID", "STATUS", "LOGS");
-    println!(
-        "{:-<36}  {:-<8}  {:-<4}  {:-<20}",
-        "", "", "", ""
-    );
+    println!("{:-<36}  {:-<8}  {:-<4}  {:-<20}", "", "", "", "");
 
     for job in &list.jobs {
         let id = job
@@ -100,7 +91,10 @@ async fn send_list(
             .map(|c| c.command.join(" "))
             .unwrap_or_default();
 
-        println!("{:<36}  {:<8}  {:<4}  {}", id, status_str, log_count, cmd_str);
+        println!(
+            "{:<36}  {:<8}  {:<4}  {}",
+            id, status_str, log_count, cmd_str
+        );
     }
     Ok(())
 }
@@ -109,9 +103,7 @@ async fn send_status(
     mut client: RemoteExecutorClient<Channel>,
     status: Status,
 ) -> Result<(), tonic::Status> {
-    let resp = client
-        .get_status(TaskId { uuid: status.id })
-        .await?;
+    let resp = client.get_status(TaskId { uuid: status.id }).await?;
     let job = resp.into_inner();
 
     let id = job
@@ -153,9 +145,7 @@ async fn send_log(
     log_args: Log,
 ) -> Result<(), tonic::Status> {
     let mut stream = client
-        .logs(TaskId {
-            uuid: log_args.id,
-        })
+        .logs(TaskId { uuid: log_args.id })
         .await?
         .into_inner();
 
@@ -170,4 +160,3 @@ async fn send_log(
     println!("--- Log stream ended ---");
     Ok(())
 }
-

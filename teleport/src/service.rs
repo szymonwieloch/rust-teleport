@@ -227,9 +227,7 @@ impl RemoteExecutor for RemoteExecutorImp {
             });
         }
 
-        Ok(tonic::Response::new(JobList {
-            jobs: job_statuses,
-        }))
+        Ok(tonic::Response::new(JobList { jobs: job_statuses }))
     }
 
     type LogsStream = ReceiverStream<Result<Log, tonic::Status>>;
@@ -246,9 +244,7 @@ fn parse_uuid(task_id: &TaskId) -> Result<Uuid, tonic::Status> {
 fn system_time_to_proto(instant: std::time::Instant) -> Timestamp {
     let elapsed = instant.elapsed();
     let now = SystemTime::now();
-    let then = now
-        .checked_sub(elapsed)
-        .unwrap_or(SystemTime::UNIX_EPOCH);
+    let then = now.checked_sub(elapsed).unwrap_or(SystemTime::UNIX_EPOCH);
     let duration = then
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
@@ -257,4 +253,3 @@ fn system_time_to_proto(instant: std::time::Instant) -> Timestamp {
         nanos: duration.subsec_nanos() as i32,
     }
 }
-

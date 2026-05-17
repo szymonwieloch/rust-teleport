@@ -18,10 +18,7 @@ pub struct LogEntry {
 #[derive(Clone, Debug, PartialEq)]
 pub enum JobStatusEnum {
     Running,
-    Stopped {
-        exit_code: i32,
-        stopped_at: Instant,
-    },
+    Stopped { exit_code: i32, stopped_at: Instant },
 }
 
 /// Represents a remotely executed process and all its tracked state.
@@ -151,9 +148,7 @@ impl Job {
             // Try graceful kill first, then force
             let _ = child.start_kill();
             let exit_status = child.wait().await;
-            let exit_code = exit_status
-                .map(|s| s.code().unwrap_or(-1))
-                .unwrap_or(-1);
+            let exit_code = exit_status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
             let stopped_at = Instant::now();
 
             let final_status = JobStatusEnum::Stopped {
