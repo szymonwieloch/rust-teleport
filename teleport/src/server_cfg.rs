@@ -14,6 +14,18 @@ struct Opts {
 #[derive(Deserialize)]
 pub struct Config {
     pub addr: String,
+    /// Optional shared secret for bearer token authentication.
+    #[serde(default)]
+    pub secret: Option<String>,
+    /// Path to TLS certificate PEM file (optional).
+    #[serde(default)]
+    pub tls_cert: Option<String>,
+    /// Path to TLS private key PEM file (optional).
+    #[serde(default)]
+    pub tls_key: Option<String>,
+    /// Enable resource limits on spawned processes.
+    #[serde(default)]
+    pub limits: bool,
 }
 
 pub fn parse_config() -> Config {

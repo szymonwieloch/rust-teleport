@@ -24,3 +24,13 @@ pub fn open_cfg_file(path: &Option<String>, default_file_name: &str) -> File {
     };
     File::open(cfg_path).expect("Could not open configuration file")
 }
+
+/// Wrap text in ANSI green color codes.
+pub fn green(text: &str) -> String {
+    format!("\x1b[32m{}\x1b[0m", text)
+}
+
+/// Wrap text in ANSI red color codes.
+pub fn red(text: &str) -> String {
+    format!("\x1b[31m{}\x1b[0m", text)
+}

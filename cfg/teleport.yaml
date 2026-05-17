@@ -1,1 +1,9 @@
 addr: 0.0.0.0:50051
+# Shared secret for Bearer token authentication (optional).
+# Clients must send "Authorization: Bearer <secret>" header.
+# secret: mysecrettoken
+# TLS certificate and key paths (optional).
+# tls_cert: /path/to/cert.pem
+# tls_key: /path/to/key.pem
+# Enable resource limits (CPU: 60s, memory: 100MB, file size: 10MB).
+# limits: true

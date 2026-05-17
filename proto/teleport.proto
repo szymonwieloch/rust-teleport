@@ -1,13 +1,20 @@
 syntax = "proto3";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 package teleport;
 
 
 service RemoteExecutor {
-    rpc Start (Command) returns (StartedTask);
-    rpc Stop (TaskId) returns (StoppedTask);
+    rpc Start (Command) returns (JobStatus);
+    rpc Stop (TaskId) returns (JobStatus);
     rpc Logs (TaskId) returns (stream Log);
-    rpc GetStatus (TaskId) returns (Status);
-    
+    rpc GetStatus (TaskId) returns (JobStatus);
+    rpc List (google.protobuf.Empty) returns (JobList);
+}
+
+enum LogSource {
+    LS_STDOUT = 0;
+    LS_STDERR = 1;
 }
 
 message TaskId {
@@ -18,35 +25,35 @@ message Command {
     repeated string command = 1;
 }
 
-message StartedTask {
+message JobStatus {
     TaskId id = 1;
-    // possibly more fields
-}
-
-message StoppedTask{
-    int32 error_code = 1;
-    //possibly more fields
-}
-
-message Status {
-    oneof task_status{
-        StartedTask started = 1;
-        StoppedTask stopped = 2;
+    google.protobuf.Timestamp started = 2;
+    uint32 logs = 3;
+    Command command = 4;
+    oneof details {
+        StoppedJobStatus stopped = 5;
+        PendingJobStatus pending = 6;
     }
 }
 
-message PendingTask{
-    int64 runtime = 1;
-    //possibly more fields
+message StoppedJobStatus {
+    int32 error_code = 1;
+    google.protobuf.Timestamp stopped = 2;
 }
 
-message TextOutput{
+message PendingJobStatus {
+    float cpu_perc = 1;
+    float memory = 2;
+}
+
+message Log {
     string text = 1;
+    LogSource src = 2;
+    google.protobuf.Timestamp timestamp = 3;
 }
 
-message Log{
-    TextOutput stdout = 1;
-    TextOutput stderr = 2;
+message JobList {
+    repeated JobStatus jobs = 1;
 }
 
 
