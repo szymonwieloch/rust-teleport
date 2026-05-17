@@ -12,7 +12,7 @@ pub fn exe_dir() -> Result<PathBuf, std::io::Error> {
 
 pub fn open_cfg_file(path: &Option<String>, default_file_name: &str) -> File {
     let cfg_path = match path {
-        Some(ref path) => PathBuf::from(path),
+        Some(path) => PathBuf::from(path),
         None => {
             let mut path_buf = exe_dir().expect("Could not obtain executable directory");
             path_buf.push(default_file_name);

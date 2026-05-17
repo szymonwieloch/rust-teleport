@@ -7,7 +7,7 @@ use protocol::remote_executor_client::RemoteExecutorClient;
 use protocol::{Command, TaskId};
 use tonic::transport::Channel;
 
-use client_cfg::{parse_config, Log, Start, Status, Stop, SubCommand};
+use client_cfg::{Log, Start, Status, Stop, SubCommand, parse_config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

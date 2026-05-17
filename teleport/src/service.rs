@@ -4,7 +4,7 @@ use super::job::Job;
 use super::jobs::Jobs;
 use super::protocol::remote_executor_server::RemoteExecutor;
 use super::protocol::{
-    job_status, Command, JobList, JobStatus, Log, PendingJobStatus, StoppedJobStatus, TaskId,
+    Command, JobList, JobStatus, Log, PendingJobStatus, StoppedJobStatus, TaskId, job_status,
 };
 use prost_types::Timestamp;
 use std::sync::Arc;
@@ -96,7 +96,7 @@ impl RemoteExecutor for RemoteExecutorImp {
             _ => {
                 return Err(tonic::Status::internal(
                     "Job stop returned unexpected running status",
-                ))
+                ));
             }
         };
 

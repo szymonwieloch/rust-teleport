@@ -7,8 +7,8 @@ mod utils;
 
 use service::RemoteExecutorImp;
 use std::fs;
-use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tonic::Status;
+use tonic::transport::{Identity, Server, ServerTlsConfig};
 
 use protocol::remote_executor_server::RemoteExecutorServer;
 
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = Server::builder();
 
     // Configure TLS if certificate and key are provided.
-    if let (Some(ref cert_path), Some(ref key_path)) = (&config.tls_cert, &config.tls_key) {
+    if let (Some(cert_path), Some(key_path)) = (&config.tls_cert, &config.tls_key) {
         let cert = fs::read_to_string(cert_path)?;
         let key = fs::read_to_string(key_path)?;
         let identity = Identity::from_pem(cert, key);

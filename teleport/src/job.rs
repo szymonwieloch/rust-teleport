@@ -304,19 +304,19 @@ unsafe fn limit_resources() {
         rlim_cur: 60,
         rlim_max: 60,
     };
-    libc::setrlimit(libc::RLIMIT_CPU, &cpu_limit);
+    unsafe { libc::setrlimit(libc::RLIMIT_CPU, &cpu_limit) };
 
     // Address space (memory) limit: 100 MB.
     let mem_limit = libc::rlimit {
         rlim_cur: 100 * 1024 * 1024,
         rlim_max: 100 * 1024 * 1024,
     };
-    libc::setrlimit(libc::RLIMIT_AS, &mem_limit);
+    unsafe { libc::setrlimit(libc::RLIMIT_AS, &mem_limit) };
 
     // File size limit: 10 MB per file.
     let fsize_limit = libc::rlimit {
         rlim_cur: 10 * 1024 * 1024,
         rlim_max: 10 * 1024 * 1024,
     };
-    libc::setrlimit(libc::RLIMIT_FSIZE, &fsize_limit);
+    unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &fsize_limit) };
 }
