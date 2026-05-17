@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "${COPILOT_HOOK_DIR}/format-rs.sh",
+        "timeout": 30
+      }
+    ]
+  }
+}
