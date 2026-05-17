@@ -2,7 +2,7 @@
 
 Fully secure and scallable remote command executor and manager
 
-rust-teleport is a project created with intention to be a proof of my skills. It can also be used as a solid project template for Rust-based secure and efficient servers. It has MIT license and your free to use parts of the code in your projects.
+`rust-teleport` is a project created with intention to be a proof of my skills. It can also be used as a solid project template for Rust-based secure and efficient servers. It has MIT license and your free to use parts of the code in your projects.
 
 # Challenge
 
