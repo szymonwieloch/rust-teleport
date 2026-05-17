@@ -21,6 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the auth interceptor, capturing the optional secret.
     let secret = config.secret.clone();
+    #[allow(clippy::result_large_err)]
     let auth_interceptor = move |req: tonic::Request<()>| -> Result<tonic::Request<()>, Status> {
         if let Some(ref expected) = secret {
             let token = req

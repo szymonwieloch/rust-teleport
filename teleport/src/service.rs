@@ -234,6 +234,7 @@ impl RemoteExecutor for RemoteExecutorImp {
 }
 
 /// Convert a UUID string from a TaskId into a Uuid, or return InvalidArgument.
+#[allow(clippy::result_large_err)]
 fn parse_uuid(task_id: &TaskId) -> Result<Uuid, tonic::Status> {
     Uuid::parse_str(&task_id.uuid)
         .map_err(|_| tonic::Status::invalid_argument("Invalid UUID format"))

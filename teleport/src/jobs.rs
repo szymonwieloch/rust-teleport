@@ -43,6 +43,7 @@ impl Jobs {
     }
 
     /// Stop all jobs in the collection. Called on server shutdown.
+    #[allow(dead_code)]
     pub async fn kill_all(&self) {
         let jobs: Vec<Arc<Job>> = {
             let mut pending = self.pending.write().await;

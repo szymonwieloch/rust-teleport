@@ -5,8 +5,7 @@ use std::path::PathBuf;
 pub fn exe_dir() -> Result<PathBuf, std::io::Error> {
     let mut path_buf = current_exe()?;
     if !path_buf.pop() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(std::io::Error::other(
             "Executable path is invalid",
         ));
     }
@@ -26,11 +25,13 @@ pub fn open_cfg_file(path: &Option<String>, default_file_name: &str) -> File {
 }
 
 /// Wrap text in ANSI green color codes.
+#[allow(dead_code)]
 pub fn green(text: &str) -> String {
     format!("\x1b[32m{}\x1b[0m", text)
 }
 
 /// Wrap text in ANSI red color codes.
+#[allow(dead_code)]
 pub fn red(text: &str) -> String {
     format!("\x1b[31m{}\x1b[0m", text)
 }
