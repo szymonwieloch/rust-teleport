@@ -4,6 +4,7 @@
 FROM rust:1.95-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y protobuf-compiler pkg-config && rm -rf /var/lib/apt/lists/*
+RUN rustup component add rustfmt
 
 WORKDIR /app
 COPY . .

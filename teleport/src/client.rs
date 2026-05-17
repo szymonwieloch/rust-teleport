@@ -151,8 +151,8 @@ async fn send_log(
 
     while let Some(log) = stream.message().await? {
         let prefix = match log.src() {
-            protocol::LogSource::LsStdout => utils::green("stdout"),
-            protocol::LogSource::LsStderr => utils::red("stderr"),
+            protocol::LogSource::LsStdout => "\x1b[32mstdout\x1b[0m".to_string(),
+            protocol::LogSource::LsStderr => "\x1b[31mstderr\x1b[0m".to_string(),
         };
         println!("[{}] {}", prefix, log.text);
     }
