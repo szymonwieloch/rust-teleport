@@ -1,53 +1,53 @@
 use super::utils::open_cfg_file;
-use clap::Clap;
+use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use serde_yaml::from_reader;
 
-#[derive(Clap)]
-#[clap(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
+#[derive(Parser)]
+#[command(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
 pub struct Opts {
     /// Sets a custom config file. By default <bin dir>/teleport.yaml is opened.
-    #[clap(short, long)]
+    #[arg(short, long)]
     pub config: Option<String>,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     pub subcmd: SubCommand,
 }
 
-#[derive(Clap)]
+#[derive(Subcommand)]
 pub enum SubCommand {
     Start(Start),
     Stop(Stop),
     Log(Log),
-    ///Lists all remote tasks
+    /// Lists all remote tasks
     List,
     Status(Status),
 }
 
 /// Starts a remote task
-#[derive(Clap)]
+#[derive(clap::Args)]
 pub struct Start {
-    /// Command to be ecexuted remotely
+    /// Command to be executed remotely
     pub cmd: Vec<String>,
 }
 
 /// Stops the remote task
-#[derive(Clap)]
+#[derive(clap::Args)]
 pub struct Stop {
-    /// ID of the reomote task
+    /// ID of the remote task
     pub id: String,
 }
 
-///Prints to the screen output of the remote task
-#[derive(Clap)]
+/// Prints to the screen output of the remote task
+#[derive(clap::Args)]
 pub struct Log {
-    /// ID of the reomote task
+    /// ID of the remote task
     pub id: String,
 }
 
-///Prints status of the remote task
-#[derive(Clap)]
+/// Prints status of the remote task
+#[derive(clap::Args)]
 pub struct Status {
-    /// ID of the reomote task
+    /// ID of the remote task
     pub id: String,
 }
 

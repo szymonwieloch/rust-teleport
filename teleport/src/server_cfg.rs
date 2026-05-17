@@ -1,13 +1,13 @@
 use super::utils::open_cfg_file;
-use clap::Clap;
+use clap::Parser;
 use serde::Deserialize;
 use serde_yaml::from_reader;
 
-#[derive(Clap)]
-#[clap(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
+#[derive(Parser)]
+#[command(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
 struct Opts {
     /// Sets a custom config file. By default <bin dir>/teleport.yaml is opened.
-    #[clap(short, long)]
+    #[arg(short, long)]
     pub config: Option<String>,
 }
 
