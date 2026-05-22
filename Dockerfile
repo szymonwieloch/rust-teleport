@@ -1,16 +1,21 @@
 # Multi-stage build for teleport (Rust)
 
 # --- Build stage ---
-FROM rust:1.95-slim-bookworm AS builder
+FROM rust:1.85-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y protobuf-compiler pkg-config && rm -rf /var/lib/apt/lists/*
-RUN rustup component add rustfmt
+RUN rustup component add rustfmt clippy
 
 WORKDIR /app
 COPY . .
 
 WORKDIR /app/teleport
-RUN cargo build --release
+
+# Run checks and tests before building release
+RUN cargo fmt --check
+RUN cargo clippy --all-targets -- -D warnings
+RUN cargo test --release --locked
+RUN cargo build --release --locked
 
 # --- Runtime stage ---
 FROM debian:bookworm-slim

@@ -18,9 +18,23 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[lints.rust]
+unused_must_use = "deny"
+unsafe_code = "deny"
+
+[lints.clippy]
+all = "deny"
+# pedantic and nursery are useful for catching issues but can be noisy;
+# enable them selectively in CI for extra scrutiny.
+# pedantic = "warn"
+# nursery = "warn"
 
 [[bin]]
 name = "teleport"

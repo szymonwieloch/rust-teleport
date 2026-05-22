@@ -4,15 +4,31 @@ use teleport::protocol::job_status;
 use teleport::protocol::remote_executor_client::RemoteExecutorClient;
 use teleport::protocol::{Command, TaskId};
 use client_cfg::{Log, Start, Status, Stop, SubCommand, parse_config};
-use tonic::transport::Channel;
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (opts, cfg) = parse_config();
 
-    let channel = Channel::from_shared(format!("http://{}", cfg.addr))?
-        .connect()
-        .await?;
+    let url = if cfg.tls.is_some() {
+        format!("https://{}", cfg.addr)
+    } else {
+        format!("http://{}", cfg.addr)
+    };
+
+    let mut endpoint = Endpoint::from_shared(url)?;
+
+    if let Some(tls) = &cfg.tls {
+        let ca_cert = std::fs::read_to_string(&tls.ca_cert)?;
+        let mut tls_config = ClientTlsConfig::new()
+            .ca_certificate(Certificate::from_pem(ca_cert));
+        if let Some(ref domain) = tls.domain {
+            tls_config = tls_config.domain_name(domain);
+        }
+        endpoint = endpoint.tls_config(tls_config)?;
+    }
+
+    let channel = endpoint.connect().await?;
     let client = RemoteExecutorClient::new(channel);
 
     match opts.subcmd {

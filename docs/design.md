@@ -34,7 +34,7 @@ The precise message and API specification can be found [here](../proto/teleport.
 
 ## Authorization mechanism
 
-Normally in the microservice architecture there is a specialized authorization service that has a database with information about users and their permissions. In a naive implemention services such as teleport would ask the authorization service if the given user has the right to perform the given operation. This approach is unfortunately not scallable. It requires making a request to the authorization service every time a request is processed by the teleport service. Eventually this leads to a denial of service when the authorization service or its database is flooded with too many requests.
+Normally in the microservice architecture there is a specialized authorization service that has a database with information about users and their permissions. In a naive implementation services such as teleport would ask the authorization service if the given user has the right to perform the given operation. This approach is unfortunately not scalable. It requires making a request to the authorization service every time a request is processed by the teleport service. Eventually this leads to a denial of service when the authorization service or its database is flooded with too many requests.
 
 A better mechanism is to use authorization tokens for example the JSON Web Tokens. In this schema the client asks the authorization service for a security token that is valid for some period of time (usually an hour). Durign this period no further requests to the authorization service need to be made.
 
@@ -42,10 +42,10 @@ The communication procedure looks like this:
 
 1. Client connects to the authorization service.
 2. Authorization prooves its identity using a certificate.
-3. Client prooves its identity using a certificate. This and the previus step are implemented using TLS.
+3. Client proves its identity using a certificate. This and the previous step are implemented using TLS.
 4. The channel becomes encrypted.
 5. Authorization service check in the database what permissions are assigned to the client.
-6. Authorization servcie generates a secret signed token and sends it to the client thrugh the encrypted channel (the key is secret)
+6. Authorization service generates a secret signed token and sends it to the client through the encrypted channel (the key is secret)
 7. Having the token client can perform requests to all services for the next one hour.
 8. Client connects to the given microservice.
 9. Identity check are again performed using TLS. Client certificate is optional - depending on the implementation client identity can be encoded in the token.
@@ -114,9 +114,9 @@ Memory - memory can be easily limited using the setrlimit() function.
 
 ## Disk
 
-Linux qute surprisingly does not provide any good disk management mechanisms. There are three possiblities:
+Linux quite surprisingly does not provide any good disk management mechanisms. There are three possibilities:
 
-- Throotling can be implemented using cgroups.
+- Throttling can be implemented using cgroups.
 - Process quotas are not supported but can be emulated using user quotas. In this approach a new user needs to be created for every task.
 - Limiting single output file size can be easily achieved using setrlimit() function. This still not stop the application from creating millions of small files.
 
@@ -126,35 +126,30 @@ Because the first two solutions are quite complicated, the third is implemented.
 
 The project uses two kinds of tests:
 
-- Unit tests - written in the Rust language.
-- API tests of the server. While the server is written in a high performance language and uses asynchronous dispatching to optimize resource usage, there is no need for this in tests. To shorten development and make tests more managable, the tests are written in the Python 3 language.
+- API integration tests — written in Rust using `tokio::test`, spinning up a real gRPC server on a random port and exercising all RPC methods.
+- Resource limit tests — verify that the server correctly applies CPU, memory, and file size limits to spawned processes.
 
 # Build system
 
-Rust already has a default build system called cargo. However, to make the builds fully reproducible a complete environment is needed and a Dockerfile needs to be created. It consists of three stages:
+Rust already has a default build system called cargo. However, to make the builds fully reproducible a complete environment is needed and a Dockerfile needs to be created. It consists of two stages:
 
-1. Rust container designed to have a reproducible client and server builds together with unit tests.
-2. Python 3 container designed to perform the API tests.
-3. Final container designed to be small but able to run client and server applications.
+1. Rust container designed to have a reproducible client and server builds together with tests.
+2. Final container designed to be small but able to run client and server applications.
 
 # Libraries and tools
 
 Rust crates:
 
-- `tonic` - the only production-ready GRPC Rust crate
-  tokio - asynchronous event dispatcher
-- `tokio::process` - asynchronous process management
-- `clap` - command line argument parser for the client
-- `jsonwebtoken` - for creation and validation of JWT tokens
-- `serde` - JSON and configuration deserialization
-
-Tests:
-
-- `Python 3`
-- `pytest` - the most popular Python 3 test executor
-- `grpc` python package - GRPC functionality
-- `stress` application - for resource limit tests, it is designed to simulate high resource usage
+- `tonic` — production-ready gRPC server and client with TLS support
+- `prost` — Protocol Buffers code generation
+- `tokio` — async runtime, process management, and I/O
+- `clap` — command line argument parser for the client
+- `serde` + `serde_yaml` — YAML configuration deserialization
+- `uuid` — unique job identifiers (v4)
+- `tracing` — structured logging and diagnostics
+- `libc` — low-level resource limit control via `setrlimit`
 
 Other
 
 - Build system: `cargo`, `Docker`
+- CI: GitHub Actions

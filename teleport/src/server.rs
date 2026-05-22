@@ -9,6 +9,15 @@ use tonic::transport::{Identity, Server, ServerTlsConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing. Set RUST_LOG environment variable to control verbosity,
+    // e.g. RUST_LOG=teleport=debug or RUST_LOG=info.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     let config = parse_config();
     let addr = config.addr.parse()?;
 
@@ -44,18 +53,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let key = fs::read_to_string(key_path)?;
         let identity = Identity::from_pem(cert, key);
         builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
-        println!("TLS enabled");
+        tracing::info!("TLS enabled");
     }
 
-    println!("Teleport server listening on {}", config.addr);
+    let service_impl = RemoteExecutorImp::new(if config.limits {
+        Some(teleport::service::LimitsConfig {
+            cpu_seconds: config.resource_limits.cpu_seconds,
+            memory_bytes: config.resource_limits.memory_bytes,
+            file_size_bytes: config.resource_limits.file_size_bytes,
+        })
+    } else {
+        None
+    });
+    let router = builder.add_service(RemoteExecutorServer::with_interceptor(
+        service_impl,
+        auth_interceptor,
+    ));
 
-    builder
-        .add_service(RemoteExecutorServer::with_interceptor(
-            RemoteExecutorImp::new(config.limits),
-            auth_interceptor,
-        ))
-        .serve(addr)
+    tracing::info!("Teleport server listening on {}", config.addr);
+
+    // Graceful shutdown: wait for Ctrl+C, then drain connections.
+    let shutdown_signal = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+        tracing::info!("Shutdown signal received, draining connections...");
+    };
+
+    router
+        .serve_with_shutdown(addr, shutdown_signal)
         .await?;
 
+    tracing::info!("Server shut down gracefully");
     Ok(())
 }

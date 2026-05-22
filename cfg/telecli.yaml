@@ -1,3 +1,5 @@
 addr: 0.0.0.0:50051
-# CA certificate path for TLS connections (optional).
-# ca_path: /path/to/ca.pem
+# TLS configuration (optional).
+# tls:
+#   ca_cert: /path/to/ca_cert.pem
+#   domain: teleport.example.com

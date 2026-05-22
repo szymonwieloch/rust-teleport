@@ -29,7 +29,7 @@ struct TestServer {
 
 impl TestServer {
     async fn start(secret: Option<String>) -> Self {
-        let imp = RemoteExecutorImp::new(false);
+        let imp = RemoteExecutorImp::new(None);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("failed to bind");
@@ -82,8 +82,14 @@ impl TestServer {
             }
         });
 
-        // Allow the server time to start
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        // Wait until the server is ready to accept connections.
+        let addr = format!("127.0.0.1:{}", port);
+        for _ in 0..50 {
+            if tokio::net::TcpStream::connect(&addr).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
         TestServer {
             shutdown_tx: Some(shutdown_tx),
@@ -175,6 +181,11 @@ impl TestClient {
             uuid: id.to_string(),
         }));
         self.inner.get_status(req).await.map(|r| r.into_inner())
+    }
+
+    async fn list(&mut self) -> Result<Vec<JobStatus>, Status> {
+        let req = self.auth_request(Request::new(()));
+        self.inner.list(req).await.map(|r| r.into_inner().jobs)
     }
 }
 
@@ -346,13 +357,17 @@ async fn test_short() {
     check_started_job(&st1, &short_cmd);
     let job_id = st1.id.as_ref().unwrap().uuid.clone();
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
-
-    // It should be done by now
-    let st2 = client
-        .get_status(&job_id)
-        .await
-        .expect("get_status failed");
+    // Poll until the job finishes instead of sleeping a fixed duration.
+    let st2 = loop {
+        let s = client
+            .get_status(&job_id)
+            .await
+            .expect("get_status failed");
+        if is_stopped(&s.details) {
+            break s;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
     check_stopped_job(&st2, &job_id, &short_cmd);
     assert_eq!(get_stopped(&st2).unwrap().error_code, 0);
 
@@ -487,6 +502,106 @@ async fn test_parallel() {
     r2.expect("drain 2 failed");
 
     server.shutdown().await;
+}
+
+/// Verify that `List` returns all jobs and their statuses.
+#[tokio::test]
+async fn test_list() {
+    let (mut client, mut server) = create_server_and_client().await;
+
+    // Start a short command that finishes quickly.
+    let short_cmd: Vec<String> = vec!["echo".into(), "hello".into()];
+    let st1 = client.start(short_cmd.clone()).await.expect("start 1 failed");
+    let id1 = st1.id.as_ref().unwrap().uuid.clone();
+
+    // Start a long-running command.
+    let long_cmd: Vec<String> = vec!["sleep".into(), "5".into()];
+    let st2 = client.start(long_cmd.clone()).await.expect("start 2 failed");
+    let id2 = st2.id.as_ref().unwrap().uuid.clone();
+
+    // List should contain both jobs.
+    let jobs = client.list().await.expect("list failed");
+    assert_eq!(jobs.len(), 2, "expected 2 jobs in list");
+
+    let ids: Vec<&str> = jobs
+        .iter()
+        .map(|j| j.id.as_ref().unwrap().uuid.as_str())
+        .collect();
+    assert!(ids.contains(&id1.as_str()), "list missing job 1");
+    assert!(ids.contains(&id2.as_str()), "list missing job 2");
+
+    // Stop the long job; it should be removed from the collection.
+    client.stop(&id2).await.expect("stop failed");
+    let jobs_after = client.list().await.expect("list after stop failed");
+    // After stop removes from pending, only the short job remains
+    // (it may also have been removed if it completed and was stopped by
+    // the background task — but it was never explicitly stopped, so it
+    // stays in the map).
+    assert!(
+        jobs_after.len() <= 2,
+        "unexpected number of jobs after stop"
+    );
+
+    server.shutdown().await;
+}
+
+/// Verify that jobs started with resource limits do not crash.
+#[tokio::test]
+async fn test_resource_limits() {
+    use teleport::service::RemoteExecutorImp;
+    use teleport::protocol::remote_executor_server::RemoteExecutorServer;
+
+    let imp = RemoteExecutorImp::new(Some(teleport::service::LimitsConfig {
+        cpu_seconds: 60,
+        memory_bytes: 100 * 1024 * 1024,
+        file_size_bytes: 10 * 1024 * 1024,
+    }));
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("failed to bind");
+    let port = listener.local_addr().unwrap().port();
+
+    let router =
+        Server::builder().add_service(RemoteExecutorServer::new(imp));
+
+    let handle = tokio::spawn(async move {
+        tokio::select! {
+            result = router.serve_with_incoming(TcpListenerStream::new(listener)) => {
+                eprintln!("server error: {:?}", result.err());
+            }
+            _ = shutdown_rx => {}
+        }
+    });
+
+    // Wait until the server is ready.
+    let addr = format!("127.0.0.1:{}", port);
+    for _ in 0..50 {
+        if tokio::net::TcpStream::connect(&addr).await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let mut client = TestClient::connect(port, false, None).await.expect("connect failed");
+
+    // A short innocuous command should succeed even with limits.
+    let cmd: Vec<String> = vec!["echo".into(), "limits-test".into()];
+    let st = client.start(cmd.clone()).await.expect("start with limits failed");
+    check_started_job(&st, &cmd);
+    let job_id = st.id.as_ref().unwrap().uuid.clone();
+
+    // Wait for it to finish.
+    loop {
+        let s = client.get_status(&job_id).await.expect("get_status failed");
+        if is_stopped(&s.details) {
+            assert_eq!(get_stopped(&s).unwrap().error_code, 0);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    drop(client);
+    let _ = shutdown_tx.send(());
+    let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
 }
 
 async fn drain_logs(

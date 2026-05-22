@@ -1,7 +1,9 @@
 use crate::protocol::{Log, LogSource, PendingJobStatus};
+use crate::service::LimitsConfig;
+use std::fmt;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command as AsyncCommand};
 use tokio::sync::{Mutex, Notify, RwLock};
@@ -18,7 +20,21 @@ pub struct LogEntry {
 #[derive(Clone, Debug, PartialEq)]
 pub enum JobStatusEnum {
     Running,
-    Stopped { exit_code: i32, stopped_at: Instant },
+    Stopped {
+        exit_code: i32,
+        stopped_at: SystemTime,
+    },
+}
+
+impl fmt::Display for JobStatusEnum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JobStatusEnum::Running => write!(f, "RUNNING"),
+            JobStatusEnum::Stopped { exit_code, .. } => {
+                write!(f, "STOPPED (exit code: {})", exit_code)
+            }
+        }
+    }
 }
 
 /// Represents a remotely executed process and all its tracked state.
@@ -26,7 +42,7 @@ pub struct Job {
     /// The original command that was executed.
     pub command: Vec<String>,
     /// When the job was started (wall clock).
-    pub started: Instant,
+    pub started: SystemTime,
     /// The tokio process handle. Wrapped in Option so `stop()` can take ownership.
     child: Mutex<Option<Child>>,
     /// The OS process ID, stored separately so we can kill the process even
@@ -36,26 +52,37 @@ pub struct Job {
     status: RwLock<JobStatusEnum>,
     /// Cached log entries from both stdout and stderr.
     logs: Mutex<Vec<LogEntry>>,
-    /// Notifies blocked log readers when new log lines arrive.
+    /// Notifies blocked log readers when new log lines arrive or the job stops.
     notify: Notify,
 }
 
 impl Job {
     /// Spawn a new job from the given command.
+    ///
     /// If `limits` is true, resource limits (CPU, memory, file size) are applied
-    /// via setrlimit before executing the child process.
+    /// via `setrlimit` before executing the child process.
+    ///
     /// Launches background tasks that read stdout and stderr line-by-line
-    /// into the log buffer.
-    pub async fn spawn(command: Vec<String>, limits: bool) -> Result<Arc<Self>, std::io::Error> {
+    /// into the log buffer, and a task that waits for process exit.
+    #[allow(unsafe_code)]
+    pub async fn spawn(
+        command: Vec<String>,
+        limits: Option<LimitsConfig>,
+    ) -> Result<Arc<Self>, std::io::Error> {
         let mut cmd = AsyncCommand::new(&command[0]);
         if command.len() > 1 {
             cmd.args(&command[1..]);
         }
 
-        if limits {
+        if let Some(ref limits_cfg) = limits {
+            let cfg = limits_cfg.clone();
+            // SAFETY: This pre_exec closure runs in the forked child process
+            // after fork() but before exec(). At this point we are
+            // single-threaded and it is safe to call setrlimit to set
+            // resource limits for the child.
             unsafe {
-                cmd.pre_exec(|| {
-                    limit_resources();
+                cmd.pre_exec(move || {
+                    limit_resources(cfg.cpu_seconds, cfg.memory_bytes, cfg.file_size_bytes);
                     Ok(())
                 });
             }
@@ -70,10 +97,11 @@ impl Job {
         let stdout = child.stdout.take().expect("stdout not piped");
         let stderr = child.stderr.take().expect("stderr not piped");
         let pid = child.id();
+        let now = SystemTime::now();
 
         let job = Arc::new(Job {
             command,
-            started: Instant::now(),
+            started: now,
             child: Mutex::new(Some(child)),
             pid,
             status: RwLock::new(JobStatusEnum::Running),
@@ -113,7 +141,7 @@ impl Job {
                 None => return, // Already stopped via explicit stop()
             };
 
-            let stopped_at = Instant::now();
+            let stopped_at = SystemTime::now();
             *job_wait.status.write().await = JobStatusEnum::Stopped {
                 exit_code,
                 stopped_at,
@@ -146,7 +174,11 @@ impl Job {
     }
 
     /// Kill the process and record exit information.
-    /// Returns the final status.
+    ///
+    /// Returns the final status. If the background wait task has already
+    /// taken ownership of the child, this sends SIGKILL by PID and waits
+    /// for the status to transition (with a 5-second timeout).
+    #[allow(unsafe_code)]
     pub async fn stop(&self) -> JobStatusEnum {
         let mut child_opt = self.child.lock().await;
         if let Some(mut child) = child_opt.take() {
@@ -154,7 +186,7 @@ impl Job {
             let _ = child.start_kill();
             let exit_status = child.wait().await;
             let exit_code = exit_status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
-            let stopped_at = Instant::now();
+            let stopped_at = SystemTime::now();
 
             let final_status = JobStatusEnum::Stopped {
                 exit_code,
@@ -170,38 +202,74 @@ impl Job {
             // Child was already taken (by background wait task or previous stop).
             // Kill the process by PID if we have one, then wait for the status.
             if let Some(pid) = self.pid {
-                // Send SIGKILL to the process — the background wait task will
-                // pick up the exit and update the status.
-                unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+                // SAFETY: Sending SIGKILL to a child process we spawned.
+                // The PID was captured at spawn time and is valid for the
+                // lifetime of our child process.
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
             }
 
-            // Wait for the status to transition to Stopped.
+            // Wait for the status to transition to Stopped, with a timeout
+            // to prevent infinite loops on a misbehaving notify.
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
             loop {
                 let status = self.status.read().await.clone();
                 if let JobStatusEnum::Stopped { .. } = status {
                     return status;
                 }
                 drop(status);
-                // Wait for the background task to update the status
-                self.notify.notified().await;
+
+                let timeout =
+                    deadline.saturating_duration_since(tokio::time::Instant::now());
+                if timeout.is_zero() {
+                    tracing::warn!(
+                        pid = ?self.pid,
+                        "Timed out waiting for job to stop; forcing Stopped status"
+                    );
+                    let final_status = JobStatusEnum::Stopped {
+                        exit_code: -1,
+                        stopped_at: SystemTime::now(),
+                    };
+                    *self.status.write().await = final_status.clone();
+                    return final_status;
+                }
+                tokio::select! {
+                    _ = self.notify.notified() => {}
+                    _ = tokio::time::sleep(timeout) => {}
+                }
             }
         }
     }
 
     /// Return cached log entries starting from `after_index`.
+    ///
     /// If no new entries are available and the job is still running,
-    /// blocks until new data arrives.
+    /// blocks until new data arrives. Returns an empty vector when
+    /// the job has stopped and all logs have been consumed.
     pub async fn get_logs(&self, after_index: usize) -> Vec<LogEntry> {
         loop {
             let logs = self.logs.lock().await;
             if after_index < logs.len() {
                 return logs[after_index..].to_vec();
             }
-            // Release the lock before awaiting on notify
+            let had_logs = !logs.is_empty();
             drop(logs);
 
-            // If the job has stopped, return whatever we have (empty)
-            if *self.status.read().await != JobStatusEnum::Running {
+            // Check if the job has terminated. We check `had_logs` to avoid
+            // a TOCTOU race: if a log was added between releasing the lock
+            // and checking status, we'd incorrectly return empty. In that
+            // case we re-loop and catch the new entry on the next iteration.
+            let is_running = *self.status.read().await == JobStatusEnum::Running;
+            if !is_running && had_logs {
+                // Re-check under lock to avoid missing a final entry.
+                let logs = self.logs.lock().await;
+                if after_index < logs.len() {
+                    return logs[after_index..].to_vec();
+                }
+                return Vec::new();
+            }
+            if !is_running {
                 return Vec::new();
             }
 
@@ -210,29 +278,34 @@ impl Job {
         }
     }
 
-    /// Total number of log entries so far.
+    /// Total number of log entries collected so far.
+    ///
+    /// Capped at `u32::MAX` since the protobuf `log` field is `uint32`.
     pub async fn log_count(&self) -> u32 {
-        self.logs.lock().await.len() as u32
+        (self.logs.lock().await.len()).min(u32::MAX as usize) as u32
     }
 
     /// Build a protobuf `Log` from a `LogEntry`.
     pub fn entry_to_proto(entry: &LogEntry) -> Log {
+        let duration = entry
+            .timestamp
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default();
         Log {
             text: entry.text.clone(),
             src: entry.source as i32,
             timestamp: Some(prost_types::Timestamp {
-                seconds: entry
-                    .timestamp
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64,
-                nanos: 0,
+                seconds: duration.as_secs() as i64,
+                nanos: duration.subsec_nanos() as i32,
             }),
         }
     }
 
     /// Compute pending (running) status with CPU percentage and memory usage.
-    /// Returns `None` if the process has already stopped.
+    ///
+    /// Returns `None` if the process has already stopped or the child handle
+    /// has been taken. CPU/memory read failures are logged and result in
+    /// zero values rather than errors, since these are best-effort metrics.
     pub async fn pending_status(&self) -> Option<PendingJobStatus> {
         let child_lock = self.child.lock().await;
         let child = match child_lock.as_ref() {
@@ -245,11 +318,15 @@ impl Job {
             None => return None,
         };
 
-        // Read CPU usage from /proc/<pid>/stat
-        let cpu_perc = read_cpu_perc(pid).await.unwrap_or(0.0);
+        let cpu_perc = read_cpu_perc(pid).await.unwrap_or_else(|e| {
+            tracing::debug!(%pid, error = %e, "Failed to read CPU usage");
+            0.0
+        });
 
-        // Read memory usage from /proc/<pid>/status (VmRSS)
-        let memory_mb = read_memory_mb(pid).await.unwrap_or(0.0);
+        let memory_mb = read_memory_mb(pid).await.unwrap_or_else(|e| {
+            tracing::debug!(%pid, error = %e, "Failed to read memory usage");
+            0.0
+        });
 
         Some(PendingJobStatus {
             cpu_perc,
@@ -258,8 +335,9 @@ impl Job {
     }
 }
 
-/// Read CPU usage percentage for a process from /proc/<pid>/stat.
-/// Returns a value between 0.0 and 100.0 * number_of_cores.
+/// Read CPU usage percentage for a process from `/proc/<pid>/stat`.
+///
+/// Returns a value between 0.0 and 100.0 multiplied by the number of cores.
 async fn read_cpu_perc(pid: u32) -> Result<f32, std::io::Error> {
     let stat = tokio::fs::read_to_string(format!("/proc/{}/stat", pid)).await?;
 
@@ -271,8 +349,8 @@ async fn read_cpu_perc(pid: u32) -> Result<f32, std::io::Error> {
     let fields: Vec<&str> = after_comm.split_whitespace().collect();
 
     // Field indices after comm (0-based in after_comm):
-    // 11 = starttime, 13 = utime, 14 = stime, 15 = cutime, 16 = cstime
-    if fields.len() < 15 {
+    // 11 = utime, 12 = stime
+    if fields.len() < 13 {
         return Ok(0.0);
     }
 
@@ -287,8 +365,8 @@ async fn read_cpu_perc(pid: u32) -> Result<f32, std::io::Error> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0.0);
 
-    // Read CLK_TCK (ticks per second)
-    let clk_tck = 100.0; // Linux default; could read from sysconf(_SC_CLK_TCK)
+    // CLK_TCK — ticks per second (standard Linux value).
+    let clk_tck = 100.0;
 
     let total_time = (utime + stime) as f64 / clk_tck;
     if uptime > 0.0 {
@@ -300,7 +378,7 @@ async fn read_cpu_perc(pid: u32) -> Result<f32, std::io::Error> {
     }
 }
 
-/// Read memory usage in MB for a process from /proc/<pid>/status.
+/// Read memory usage in MB for a process from `/proc/<pid>/status` (VmRSS).
 async fn read_memory_mb(pid: u32) -> Result<f32, std::io::Error> {
     let status = tokio::fs::read_to_string(format!("/proc/{}/status", pid)).await?;
     for line in status.lines() {
@@ -316,28 +394,33 @@ async fn read_memory_mb(pid: u32) -> Result<f32, std::io::Error> {
     Ok(0.0)
 }
 
-/// Apply resource limits to the current (child) process via setrlimit.
-/// This function must be called from `pre_exec` — it runs in the forked child
-/// before the new program is executed.
-unsafe fn limit_resources() {
-    // CPU time limit: 60 seconds of total CPU time.
-    let cpu_limit = libc::rlimit {
-        rlim_cur: 60,
-        rlim_max: 60,
-    };
-    unsafe { libc::setrlimit(libc::RLIMIT_CPU, &cpu_limit) };
+/// Apply resource limits to the current (child) process via `setrlimit`.
+///
+/// # Safety
+///
+/// This function must only be called from `pre_exec` — it runs in the forked
+/// child before the new program is executed. At that point we are
+/// single-threaded and it is safe to call `setrlimit`.
+fn limit_resources(cpu_seconds: u64, memory_bytes: u64, file_size_bytes: u64) {
+    // SAFETY: Called only from pre_exec in the forked child.
+    #[allow(unsafe_code)]
+    unsafe {
+        let cpu_limit = libc::rlimit {
+            rlim_cur: cpu_seconds,
+            rlim_max: cpu_seconds,
+        };
+        libc::setrlimit(libc::RLIMIT_CPU, &cpu_limit);
 
-    // Address space (memory) limit: 100 MB.
-    let mem_limit = libc::rlimit {
-        rlim_cur: 100 * 1024 * 1024,
-        rlim_max: 100 * 1024 * 1024,
-    };
-    unsafe { libc::setrlimit(libc::RLIMIT_AS, &mem_limit) };
+        let mem_limit = libc::rlimit {
+            rlim_cur: memory_bytes,
+            rlim_max: memory_bytes,
+        };
+        libc::setrlimit(libc::RLIMIT_AS, &mem_limit);
 
-    // File size limit: 10 MB per file.
-    let fsize_limit = libc::rlimit {
-        rlim_cur: 10 * 1024 * 1024,
-        rlim_max: 10 * 1024 * 1024,
-    };
-    unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &fsize_limit) };
+        let fsize_limit = libc::rlimit {
+            rlim_cur: file_size_bytes,
+            rlim_max: file_size_bytes,
+        };
+        libc::setrlimit(libc::RLIMIT_FSIZE, &fsize_limit);
+    }
 }

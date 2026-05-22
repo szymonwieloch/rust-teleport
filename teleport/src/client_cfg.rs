@@ -54,6 +54,19 @@ pub struct Status {
 #[derive(Deserialize)]
 pub struct Config {
     pub addr: String,
+    /// Optional TLS configuration.
+    #[serde(default)]
+    pub tls: Option<TlsConfig>,
+}
+
+/// TLS client configuration.
+#[derive(Deserialize)]
+pub struct TlsConfig {
+    /// Path to the CA certificate PEM file for verifying the server.
+    pub ca_cert: String,
+    /// Expected DNS name in the server's certificate (required for domain validation).
+    #[serde(default)]
+    pub domain: Option<String>,
 }
 
 pub fn parse_config() -> (Opts, Config) {

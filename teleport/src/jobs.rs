@@ -1,3 +1,9 @@
+//! Thread-safe job registry.
+//!
+//! The [`Jobs`] type provides a concurrent-safe `HashMap` of all known jobs,
+//! indexed by UUID. It supports insert, lookup, stop (which also removes),
+//! and list operations.
+
 use crate::job::{Job, JobStatusEnum};
 use std::collections::HashMap;
 use std::sync::Arc;

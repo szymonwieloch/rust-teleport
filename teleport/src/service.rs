@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use crate::job::Job;
 use crate::jobs::Jobs;
 use crate::protocol::remote_executor_server::RemoteExecutor;
@@ -13,13 +11,28 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
+/// Resource limits configuration for spawned processes.
+#[derive(Clone, Debug)]
+pub struct LimitsConfig {
+    pub cpu_seconds: u64,
+    pub memory_bytes: u64,
+    pub file_size_bytes: u64,
+}
+
+/// gRPC service implementation for the `RemoteExecutor` protocol.
+///
+/// Handles all five RPC methods: `Start`, `Stop`, `Logs`, `GetStatus`, and `List`.
+/// Delegates process management to the [`Jobs`] collection and individual [`Job`] instances.
 pub struct RemoteExecutorImp {
     jobs: Jobs,
-    limits: bool,
+    limits: Option<LimitsConfig>,
 }
 
 impl RemoteExecutorImp {
-    pub fn new(limits: bool) -> Self {
+    /// Create a new service instance.
+    ///
+    /// If `limits` is `Some`, resource limits will be applied to every spawned process.
+    pub fn new(limits: Option<LimitsConfig>) -> Self {
         RemoteExecutorImp {
             jobs: Jobs::new(),
             limits,
@@ -40,7 +53,7 @@ impl RemoteExecutor for RemoteExecutorImp {
             ));
         }
 
-        let job = Job::spawn(args.clone(), self.limits)
+        let job = Job::spawn(args.clone(), self.limits.clone())
             .await
             .map_err(|e| tonic::Status::internal(format!("Failed to spawn process: {}", e)))?;
 
@@ -247,18 +260,14 @@ impl RemoteExecutor for RemoteExecutorImp {
 
 /// Convert a UUID string from a TaskId into a Uuid, or return InvalidArgument.
 #[allow(clippy::result_large_err)]
-fn parse_uuid(task_id: &TaskId) -> Result<Uuid, tonic::Status> {
+pub fn parse_uuid(task_id: &TaskId) -> Result<Uuid, tonic::Status> {
     Uuid::parse_str(&task_id.uuid)
         .map_err(|_| tonic::Status::invalid_argument("Invalid UUID format"))
 }
 
-/// Convert std::time::Instant (wall-clock based) or SystemTime into protobuf Timestamp.
-/// We use SystemTime::now() offset from Instant::now().
-fn system_time_to_proto(instant: std::time::Instant) -> Timestamp {
-    let elapsed = instant.elapsed();
-    let now = SystemTime::now();
-    let then = now.checked_sub(elapsed).unwrap_or(SystemTime::UNIX_EPOCH);
-    let duration = then
+/// Convert a `SystemTime` to a protobuf `Timestamp`.
+fn system_time_to_proto(ts: SystemTime) -> Timestamp {
+    let duration = ts
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
     Timestamp {

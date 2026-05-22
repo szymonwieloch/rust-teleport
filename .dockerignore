@@ -1,0 +1,13 @@
+# Rust build artifacts
+teleport/target/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore

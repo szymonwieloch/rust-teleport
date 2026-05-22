@@ -5,5 +5,10 @@ addr: 0.0.0.0:50051
 # TLS certificate and key paths (optional).
 # tls_cert: /path/to/cert.pem
 # tls_key: /path/to/key.pem
-# Enable resource limits (CPU: 60s, memory: 100MB, file size: 10MB).
+# Enable resource limits on spawned processes.
 # limits: true
+# Customize resource limits (only used when limits: true).
+# resource_limits:
+#   cpu_seconds: 60
+#   memory_bytes: 104857600    # 100 MB
+#   file_size_bytes: 10485760  # 10 MB

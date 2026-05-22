@@ -1,12 +1,12 @@
 # rust-teleport
 
-Fully secure and scallable remote command executor and manager
+Fully secure and scalable remote command executor and manager
 
-`rust-teleport` is a project created with intention to be a proof of my skills. It can also be used as a solid project template for Rust-based secure and efficient servers. It has MIT license and your free to use parts of the code in your projects.
+`rust-teleport` is a project created with intention to be a proof of my skills. It can also be used as a solid project template for Rust-based secure and efficient servers. It has MIT license and you're free to use parts of the code in your projects.
 
 # Challenge
 
-Create a fully secure and scallable server and command line client with the capability to:
+Create a fully secure and scalable server and command line client with the capability to:
 
 - Remotely start a task on the server. The task is any bash-like command.
 - Query the task status.
@@ -27,6 +27,46 @@ In addition to the functional requirements there are also several quality requir
 Full design document can be found [here](./docs/design.md).
 
 It contains all major decisons for this application and explains why they should be implemented in the given way.
+
+# Architecture
+
+```mermaid
+graph TD
+    subgraph Client["telecli (CLI Client)"]
+        CLI[clap Argument Parser]
+        GRPC_C[gRPC Client]
+    end
+
+    subgraph Server["teleport (gRPC Server)"]
+        TLS[mutual TLS]
+        AUTH[Bearer Token Auth]
+        GRPC_S[tonic gRPC Server]
+        JOBS[Job Manager]
+        PROC[tokio::process]
+        LIMITS[Resource Limits]
+    end
+
+    CLI --> GRPC_C
+    GRPC_C -->|TLS + gRPC| TLS
+    TLS --> AUTH
+    AUTH --> GRPC_S
+    GRPC_S --> JOBS
+    JOBS --> PROC
+    JOBS --> LIMITS
+```
+
+## Key Dependencies
+
+| Crate | Purpose |
+|-------|---------|
+| `tonic` | Production-ready gRPC server and client with TLS support |
+| `prost` | Protocol Buffers code generation |
+| `tokio` | Async runtime, process management, and I/O |
+| `clap` | Command-line argument parsing with derive macros |
+| `serde` + `serde_yaml` | YAML configuration deserialization |
+| `uuid` | Unique job identifiers |
+| `tracing` | Structured logging and diagnostics |
+| `libc` | Low-level resource limit control via `setrlimit` |
 
 # Build and run
 
