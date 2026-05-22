@@ -49,6 +49,7 @@ impl TestServer {
         }
 
         let secret_clone = secret.clone();
+        #[allow(clippy::result_large_err)]
         let auth_interceptor = move |req: Request<()>| -> Result<Request<()>, Status> {
             if let Some(ref expected) = secret_clone {
                 let token = req

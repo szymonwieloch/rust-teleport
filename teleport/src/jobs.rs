@@ -15,6 +15,12 @@ pub struct Jobs {
     pending: RwLock<HashMap<Uuid, Arc<Job>>>,
 }
 
+impl Default for Jobs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Jobs {
     pub fn new() -> Self {
         Jobs {

@@ -218,7 +218,6 @@ impl Job {
                 if let JobStatusEnum::Stopped { .. } = status {
                     return status;
                 }
-                drop(status);
 
                 let timeout =
                     deadline.saturating_duration_since(tokio::time::Instant::now());
