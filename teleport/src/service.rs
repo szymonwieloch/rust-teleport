@@ -33,10 +33,7 @@ impl RemoteExecutorImp {
     ///
     /// If `limits` is `Some`, resource limits will be applied to every spawned process.
     pub fn new(limits: Option<LimitsConfig>) -> Self {
-        RemoteExecutorImp {
-            jobs: Jobs::new(),
-            limits,
-        }
+        RemoteExecutorImp { jobs: Jobs::new(), limits }
     }
 }
 
@@ -58,22 +55,16 @@ impl RemoteExecutor for RemoteExecutorImp {
             .map_err(|e| tonic::Status::internal(format!("Failed to spawn process: {}", e)))?;
 
         let proc_uuid = Uuid::new_v4();
-        let pending = job.pending_status().await.unwrap_or(PendingJobStatus {
-            cpu_perc: 0.0,
-            memory: 0.0,
-        });
+        let pending =
+            job.pending_status().await.unwrap_or(PendingJobStatus { cpu_perc: 0.0, memory: 0.0 });
 
         self.jobs.insert(proc_uuid, Arc::clone(&job)).await;
 
         let job_status = JobStatus {
-            id: Some(TaskId {
-                uuid: proc_uuid.to_string(),
-            }),
+            id: Some(TaskId { uuid: proc_uuid.to_string() }),
             started: Some(system_time_to_proto(job.started)),
             logs: job.log_count().await,
-            command: Some(Command {
-                command: args.clone(),
-            }),
+            command: Some(Command { command: args.clone() }),
             details: Some(job_status::Details::Pending(pending)),
         };
         Ok(tonic::Response::new(job_status))
@@ -87,29 +78,18 @@ impl RemoteExecutor for RemoteExecutorImp {
         let uuid = parse_uuid(&task_id)?;
 
         // Collect job metadata before stopping (stop removes the job from the map).
-        let job = self
-            .jobs
-            .find(&uuid)
-            .await
-            .ok_or_else(|| tonic::Status::not_found("Job not found"))?;
+        let job =
+            self.jobs.find(&uuid).await.ok_or_else(|| tonic::Status::not_found("Job not found"))?;
         let started = job.started;
         let command = job.command.clone();
         let logs = job.log_count().await;
 
-        let final_status = self
-            .jobs
-            .stop(&uuid)
-            .await
-            .ok_or_else(|| tonic::Status::not_found("Job not found"))?;
+        let final_status =
+            self.jobs.stop(&uuid).await.ok_or_else(|| tonic::Status::not_found("Job not found"))?;
 
         let status = match final_status {
-            crate::job::JobStatusEnum::Stopped {
-                exit_code,
-                stopped_at,
-            } => JobStatus {
-                id: Some(TaskId {
-                    uuid: uuid.to_string(),
-                }),
+            crate::job::JobStatusEnum::Stopped { exit_code, stopped_at } => JobStatus {
+                id: Some(TaskId { uuid: uuid.to_string() }),
                 started: Some(system_time_to_proto(started)),
                 logs,
                 command: Some(Command { command }),
@@ -119,9 +99,7 @@ impl RemoteExecutor for RemoteExecutorImp {
                 })),
             },
             _ => {
-                return Err(tonic::Status::internal(
-                    "Job stop returned unexpected running status",
-                ));
+                return Err(tonic::Status::internal("Job stop returned unexpected running status"));
             }
         };
 
@@ -135,11 +113,8 @@ impl RemoteExecutor for RemoteExecutorImp {
         let task_id = req.into_inner();
         let uuid = parse_uuid(&task_id)?;
 
-        let job = self
-            .jobs
-            .find(&uuid)
-            .await
-            .ok_or_else(|| tonic::Status::not_found("Job not found"))?;
+        let job =
+            self.jobs.find(&uuid).await.ok_or_else(|| tonic::Status::not_found("Job not found"))?;
 
         let (tx, rx) = mpsc::channel(16);
 
@@ -172,41 +147,33 @@ impl RemoteExecutor for RemoteExecutorImp {
         let task_id = req.into_inner();
         let uuid = parse_uuid(&task_id)?;
 
-        let job = self
-            .jobs
-            .find(&uuid)
-            .await
-            .ok_or_else(|| tonic::Status::not_found("Job not found"))?;
+        let job =
+            self.jobs.find(&uuid).await.ok_or_else(|| tonic::Status::not_found("Job not found"))?;
 
         let status = job.status().await;
         let logs = job.log_count().await;
 
         let details = match status {
             crate::job::JobStatusEnum::Running => {
-                let pending = job.pending_status().await.unwrap_or(PendingJobStatus {
-                    cpu_perc: 0.0,
-                    memory: 0.0,
-                });
+                let pending = job
+                    .pending_status()
+                    .await
+                    .unwrap_or(PendingJobStatus { cpu_perc: 0.0, memory: 0.0 });
                 job_status::Details::Pending(pending)
             }
-            crate::job::JobStatusEnum::Stopped {
-                exit_code,
-                stopped_at,
-            } => job_status::Details::Stopped(StoppedJobStatus {
-                error_code: exit_code,
-                stopped: Some(system_time_to_proto(stopped_at)),
-            }),
+            crate::job::JobStatusEnum::Stopped { exit_code, stopped_at } => {
+                job_status::Details::Stopped(StoppedJobStatus {
+                    error_code: exit_code,
+                    stopped: Some(system_time_to_proto(stopped_at)),
+                })
+            }
         };
 
         Ok(tonic::Response::new(JobStatus {
-            id: Some(TaskId {
-                uuid: uuid.to_string(),
-            }),
+            id: Some(TaskId { uuid: uuid.to_string() }),
             started: Some(system_time_to_proto(job.started)),
             logs,
-            command: Some(Command {
-                command: job.command.clone(),
-            }),
+            command: Some(Command { command: job.command.clone() }),
             details: Some(details),
         }))
     }
@@ -224,30 +191,25 @@ impl RemoteExecutor for RemoteExecutorImp {
 
             let details = match status {
                 crate::job::JobStatusEnum::Running => {
-                    let pending = job.pending_status().await.unwrap_or(PendingJobStatus {
-                        cpu_perc: 0.0,
-                        memory: 0.0,
-                    });
+                    let pending = job
+                        .pending_status()
+                        .await
+                        .unwrap_or(PendingJobStatus { cpu_perc: 0.0, memory: 0.0 });
                     job_status::Details::Pending(pending)
                 }
-                crate::job::JobStatusEnum::Stopped {
-                    exit_code,
-                    stopped_at,
-                } => job_status::Details::Stopped(StoppedJobStatus {
-                    error_code: exit_code,
-                    stopped: Some(system_time_to_proto(stopped_at)),
-                }),
+                crate::job::JobStatusEnum::Stopped { exit_code, stopped_at } => {
+                    job_status::Details::Stopped(StoppedJobStatus {
+                        error_code: exit_code,
+                        stopped: Some(system_time_to_proto(stopped_at)),
+                    })
+                }
             };
 
             job_statuses.push(JobStatus {
-                id: Some(TaskId {
-                    uuid: uuid.to_string(),
-                }),
+                id: Some(TaskId { uuid: uuid.to_string() }),
                 started: Some(system_time_to_proto(job.started)),
                 logs,
-                command: Some(Command {
-                    command: job.command.clone(),
-                }),
+                command: Some(Command { command: job.command.clone() }),
                 details: Some(details),
             });
         }
@@ -267,11 +229,6 @@ pub fn parse_uuid(task_id: &TaskId) -> Result<Uuid, tonic::Status> {
 
 /// Convert a `SystemTime` to a protobuf `Timestamp`.
 fn system_time_to_proto(ts: SystemTime) -> Timestamp {
-    let duration = ts
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    Timestamp {
-        seconds: duration.as_secs() as i64,
-        nanos: duration.subsec_nanos() as i32,
-    }
+    let duration = ts.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
+    Timestamp { seconds: duration.as_secs() as i64, nanos: duration.subsec_nanos() as i32 }
 }

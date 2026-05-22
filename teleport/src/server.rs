@@ -1,9 +1,9 @@
 mod server_cfg;
 
-use teleport::service::RemoteExecutorImp;
-use teleport::protocol::remote_executor_server::RemoteExecutorServer;
 use server_cfg::parse_config;
 use std::fs;
+use teleport::protocol::remote_executor_server::RemoteExecutorServer;
+use teleport::service::RemoteExecutorImp;
 use tonic::Status;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 
@@ -36,9 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match token {
                 Some(t) if t == *expected => {}
                 _ => {
-                    return Err(Status::unauthenticated(
-                        "Invalid or missing authorization token",
-                    ));
+                    return Err(Status::unauthenticated("Invalid or missing authorization token"));
                 }
             }
         }
@@ -65,24 +63,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     });
-    let router = builder.add_service(RemoteExecutorServer::with_interceptor(
-        service_impl,
-        auth_interceptor,
-    ));
+    let router =
+        builder.add_service(RemoteExecutorServer::with_interceptor(service_impl, auth_interceptor));
 
     tracing::info!("Teleport server listening on {}", config.addr);
 
     // Graceful shutdown: wait for Ctrl+C, then drain connections.
     let shutdown_signal = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
+        tokio::signal::ctrl_c().await.expect("Failed to install Ctrl+C handler");
         tracing::info!("Shutdown signal received, draining connections...");
     };
 
-    router
-        .serve_with_shutdown(addr, shutdown_signal)
-        .await?;
+    router.serve_with_shutdown(addr, shutdown_signal).await?;
 
     tracing::info!("Server shut down gracefully");
     Ok(())

@@ -1,9 +1,9 @@
 mod client_cfg;
 
+use client_cfg::{Log, Start, Status, Stop, SubCommand, parse_config};
 use teleport::protocol::job_status;
 use teleport::protocol::remote_executor_client::RemoteExecutorClient;
 use teleport::protocol::{Command, TaskId};
-use client_cfg::{Log, Start, Status, Stop, SubCommand, parse_config};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 
 #[tokio::main]
@@ -20,8 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(tls) = &cfg.tls {
         let ca_cert = std::fs::read_to_string(&tls.ca_cert)?;
-        let mut tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(ca_cert));
+        let mut tls_config = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(ca_cert));
         if let Some(ref domain) = tls.domain {
             tls_config = tls_config.domain_name(domain);
         }
@@ -49,9 +48,7 @@ async fn send_start(
     let resp = client.start(cmd).await?;
     let job = resp.into_inner();
     match &job.id {
-        None => Err(tonic::Status::invalid_argument(
-            "Response did not contain task ID",
-        )),
+        None => Err(tonic::Status::invalid_argument("Response did not contain task ID")),
         Some(task_id) => {
             println!("Started task with ID: {}", task_id.uuid);
             Ok(())
@@ -87,27 +84,16 @@ async fn send_list(mut client: RemoteExecutorClient<Channel>) -> Result<(), toni
     println!("{:-<36}  {:-<8}  {:-<4}  {:-<20}", "", "", "", "");
 
     for job in &list.jobs {
-        let id = job
-            .id
-            .as_ref()
-            .map(|t| t.uuid.as_str())
-            .unwrap_or("unknown");
+        let id = job.id.as_ref().map(|t| t.uuid.as_str()).unwrap_or("unknown");
         let status_str = match &job.details {
             Some(job_status::Details::Pending(_)) => "RUNNING",
             Some(job_status::Details::Stopped(_)) => "STOPPED",
             None => "?",
         };
         let log_count = job.logs;
-        let cmd_str = job
-            .command
-            .as_ref()
-            .map(|c| c.command.join(" "))
-            .unwrap_or_default();
+        let cmd_str = job.command.as_ref().map(|c| c.command.join(" ")).unwrap_or_default();
 
-        println!(
-            "{:<36}  {:<8}  {:<4}  {}",
-            id, status_str, log_count, cmd_str
-        );
+        println!("{:<36}  {:<8}  {:<4}  {}", id, status_str, log_count, cmd_str);
     }
     Ok(())
 }
@@ -119,16 +105,8 @@ async fn send_status(
     let resp = client.get_status(TaskId { uuid: status.id }).await?;
     let job = resp.into_inner();
 
-    let id = job
-        .id
-        .as_ref()
-        .map(|t| t.uuid.as_str())
-        .unwrap_or("unknown");
-    let cmd = job
-        .command
-        .as_ref()
-        .map(|c| c.command.join(" "))
-        .unwrap_or_default();
+    let id = job.id.as_ref().map(|t| t.uuid.as_str()).unwrap_or("unknown");
+    let cmd = job.command.as_ref().map(|c| c.command.join(" ")).unwrap_or_default();
 
     match job.details {
         Some(job_status::Details::Pending(p)) => {
@@ -157,10 +135,7 @@ async fn send_log(
     mut client: RemoteExecutorClient<Channel>,
     log_args: Log,
 ) -> Result<(), tonic::Status> {
-    let mut stream = client
-        .logs(TaskId { uuid: log_args.id })
-        .await?
-        .into_inner();
+    let mut stream = client.logs(TaskId { uuid: log_args.id }).await?.into_inner();
 
     while let Some(log) = stream.message().await? {
         let prefix = match log.src() {

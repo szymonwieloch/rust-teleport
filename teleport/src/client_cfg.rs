@@ -1,7 +1,7 @@
-use teleport::utils::open_cfg_file;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use serde_yaml::from_reader;
+use teleport::utils::open_cfg_file;
 
 #[derive(Parser)]
 #[command(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
@@ -72,8 +72,5 @@ pub struct TlsConfig {
 pub fn parse_config() -> (Opts, Config) {
     let opts = Opts::parse();
     let cfg_file = open_cfg_file(&opts.config, "telecli.yaml");
-    (
-        opts,
-        from_reader(cfg_file).expect("Could not parse configuration file"),
-    )
+    (opts, from_reader(cfg_file).expect("Could not parse configuration file"))
 }

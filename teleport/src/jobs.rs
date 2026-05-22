@@ -23,9 +23,7 @@ impl Default for Jobs {
 
 impl Jobs {
     pub fn new() -> Self {
-        Jobs {
-            pending: RwLock::new(HashMap::new()),
-        }
+        Jobs { pending: RwLock::new(HashMap::new()) }
     }
 
     /// Insert a job into the collection.
@@ -48,10 +46,7 @@ impl Jobs {
     /// Return a snapshot of all jobs and their current statuses.
     pub async fn list(&self) -> Vec<(Uuid, Arc<Job>)> {
         let pending = self.pending.read().await;
-        pending
-            .iter()
-            .map(|(id, job)| (*id, Arc::clone(job)))
-            .collect()
+        pending.iter().map(|(id, job)| (*id, Arc::clone(job))).collect()
     }
 
     /// Stop all jobs in the collection. Called on server shutdown.

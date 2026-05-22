@@ -1,7 +1,7 @@
-use teleport::utils::open_cfg_file;
 use clap::Parser;
 use serde::Deserialize;
 use serde_yaml::from_reader;
+use teleport::utils::open_cfg_file;
 
 #[derive(Parser)]
 #[command(version = "1.0", author = "Szymon Wieloch <szymonwieloch.com>")]
@@ -25,9 +25,15 @@ pub struct ResourceLimits {
     pub file_size_bytes: u64,
 }
 
-fn default_cpu_limit() -> u64 { 60 }
-fn default_memory_limit() -> u64 { 100 * 1024 * 1024 }
-fn default_fsize_limit() -> u64 { 10 * 1024 * 1024 }
+fn default_cpu_limit() -> u64 {
+    60
+}
+fn default_memory_limit() -> u64 {
+    100 * 1024 * 1024
+}
+fn default_fsize_limit() -> u64 {
+    10 * 1024 * 1024
+}
 
 impl Default for ResourceLimits {
     fn default() -> Self {

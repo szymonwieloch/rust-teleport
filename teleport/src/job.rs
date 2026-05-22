@@ -20,10 +20,7 @@ pub struct LogEntry {
 #[derive(Clone, Debug, PartialEq)]
 pub enum JobStatusEnum {
     Running,
-    Stopped {
-        exit_code: i32,
-        stopped_at: SystemTime,
-    },
+    Stopped { exit_code: i32, stopped_at: SystemTime },
 }
 
 impl fmt::Display for JobStatusEnum {
@@ -88,11 +85,8 @@ impl Job {
             }
         }
 
-        let mut child = cmd
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()?;
+        let mut child =
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true).spawn()?;
 
         let stdout = child.stdout.take().expect("stdout not piped");
         let stderr = child.stderr.take().expect("stderr not piped");
@@ -142,10 +136,7 @@ impl Job {
             };
 
             let stopped_at = SystemTime::now();
-            *job_wait.status.write().await = JobStatusEnum::Stopped {
-                exit_code,
-                stopped_at,
-            };
+            *job_wait.status.write().await = JobStatusEnum::Stopped { exit_code, stopped_at };
 
             // Wake up any blocked log readers
             job_wait.notify.notify_waiters();
@@ -156,11 +147,7 @@ impl Job {
 
     /// Append a log line to the buffer and notify any blocked readers.
     async fn push_log(&self, text: String, source: LogSource) {
-        let entry = LogEntry {
-            text,
-            source,
-            timestamp: SystemTime::now(),
-        };
+        let entry = LogEntry { text, source, timestamp: SystemTime::now() };
         {
             let mut logs = self.logs.lock().await;
             logs.push(entry);
@@ -188,10 +175,7 @@ impl Job {
             let exit_code = exit_status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
             let stopped_at = SystemTime::now();
 
-            let final_status = JobStatusEnum::Stopped {
-                exit_code,
-                stopped_at,
-            };
+            let final_status = JobStatusEnum::Stopped { exit_code, stopped_at };
             *self.status.write().await = final_status.clone();
 
             // Wake up any log readers — the process is done
@@ -219,17 +203,14 @@ impl Job {
                     return status;
                 }
 
-                let timeout =
-                    deadline.saturating_duration_since(tokio::time::Instant::now());
+                let timeout = deadline.saturating_duration_since(tokio::time::Instant::now());
                 if timeout.is_zero() {
                     tracing::warn!(
                         pid = ?self.pid,
                         "Timed out waiting for job to stop; forcing Stopped status"
                     );
-                    let final_status = JobStatusEnum::Stopped {
-                        exit_code: -1,
-                        stopped_at: SystemTime::now(),
-                    };
+                    let final_status =
+                        JobStatusEnum::Stopped { exit_code: -1, stopped_at: SystemTime::now() };
                     *self.status.write().await = final_status.clone();
                     return final_status;
                 }
@@ -286,10 +267,7 @@ impl Job {
 
     /// Build a protobuf `Log` from a `LogEntry`.
     pub fn entry_to_proto(entry: &LogEntry) -> Log {
-        let duration = entry
-            .timestamp
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default();
+        let duration = entry.timestamp.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
         Log {
             text: entry.text.clone(),
             src: entry.source as i32,
@@ -327,10 +305,7 @@ impl Job {
             0.0
         });
 
-        Some(PendingJobStatus {
-            cpu_perc,
-            memory: memory_mb,
-        })
+        Some(PendingJobStatus { cpu_perc, memory: memory_mb })
     }
 }
 
@@ -358,11 +333,8 @@ async fn read_cpu_perc(pid: u32) -> Result<f32, std::io::Error> {
 
     // Read system uptime from /proc/uptime
     let uptime_str = tokio::fs::read_to_string("/proc/uptime").await?;
-    let uptime: f64 = uptime_str
-        .split_whitespace()
-        .next()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.0);
+    let uptime: f64 =
+        uptime_str.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
 
     // CLK_TCK — ticks per second (standard Linux value).
     let clk_tck = 100.0;
@@ -382,11 +354,7 @@ async fn read_memory_mb(pid: u32) -> Result<f32, std::io::Error> {
     let status = tokio::fs::read_to_string(format!("/proc/{}/status", pid)).await?;
     for line in status.lines() {
         if line.starts_with("VmRSS:") {
-            let kb: u64 = line
-                .split_whitespace()
-                .nth(1)
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
+            let kb: u64 = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
             return Ok(kb as f32 / 1024.0); // KB → MB
         }
     }
@@ -404,22 +372,13 @@ fn limit_resources(cpu_seconds: u64, memory_bytes: u64, file_size_bytes: u64) {
     // SAFETY: Called only from pre_exec in the forked child.
     #[allow(unsafe_code)]
     unsafe {
-        let cpu_limit = libc::rlimit {
-            rlim_cur: cpu_seconds,
-            rlim_max: cpu_seconds,
-        };
+        let cpu_limit = libc::rlimit { rlim_cur: cpu_seconds, rlim_max: cpu_seconds };
         libc::setrlimit(libc::RLIMIT_CPU, &cpu_limit);
 
-        let mem_limit = libc::rlimit {
-            rlim_cur: memory_bytes,
-            rlim_max: memory_bytes,
-        };
+        let mem_limit = libc::rlimit { rlim_cur: memory_bytes, rlim_max: memory_bytes };
         libc::setrlimit(libc::RLIMIT_AS, &mem_limit);
 
-        let fsize_limit = libc::rlimit {
-            rlim_cur: file_size_bytes,
-            rlim_max: file_size_bytes,
-        };
+        let fsize_limit = libc::rlimit { rlim_cur: file_size_bytes, rlim_max: file_size_bytes };
         libc::setrlimit(libc::RLIMIT_FSIZE, &fsize_limit);
     }
 }

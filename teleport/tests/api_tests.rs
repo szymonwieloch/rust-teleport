@@ -5,7 +5,9 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::metadata::MetadataValue;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity, Server, ServerTlsConfig};
+use tonic::transport::{
+    Certificate, Channel, ClientTlsConfig, Endpoint, Identity, Server, ServerTlsConfig,
+};
 use tonic::{Request, Status};
 use uuid::Uuid;
 
@@ -92,11 +94,7 @@ impl TestServer {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
 
-        TestServer {
-            shutdown_tx: Some(shutdown_tx),
-            handle: Some(handle),
-            port,
-        }
+        TestServer { shutdown_tx: Some(shutdown_tx), handle: Some(handle), port }
     }
 
     fn port(&self) -> u16 {
@@ -130,13 +128,13 @@ struct TestClient {
 }
 
 impl TestClient {
-    async fn connect(port: u16, use_tls: bool, secret: Option<&str>) -> Result<Self, tonic::transport::Error> {
+    async fn connect(
+        port: u16,
+        use_tls: bool,
+        secret: Option<&str>,
+    ) -> Result<Self, tonic::transport::Error> {
         let addr = format!("127.0.0.1:{}", port);
-        let url = if use_tls {
-            format!("https://{}", addr)
-        } else {
-            format!("http://{}", addr)
-        };
+        let url = if use_tls { format!("https://{}", addr) } else { format!("http://{}", addr) };
 
         let mut endpoint = Endpoint::from_shared(url).expect("invalid URL");
 
@@ -171,16 +169,12 @@ impl TestClient {
     }
 
     async fn stop(&mut self, id: &str) -> Result<JobStatus, Status> {
-        let req = self.auth_request(Request::new(TaskId {
-            uuid: id.to_string(),
-        }));
+        let req = self.auth_request(Request::new(TaskId { uuid: id.to_string() }));
         self.inner.stop(req).await.map(|r| r.into_inner())
     }
 
     async fn get_status(&mut self, id: &str) -> Result<JobStatus, Status> {
-        let req = self.auth_request(Request::new(TaskId {
-            uuid: id.to_string(),
-        }));
+        let req = self.auth_request(Request::new(TaskId { uuid: id.to_string() }));
         self.inner.get_status(req).await.map(|r| r.into_inner())
     }
 
@@ -218,12 +212,7 @@ fn check_job(status: &JobStatus, cmd: &[String]) {
         is_recent(status.started.as_ref().expect("missing started")),
         "started timestamp not recent"
     );
-    let got_cmd = status
-        .command
-        .as_ref()
-        .expect("missing command")
-        .command
-        .clone();
+    let got_cmd = status.command.as_ref().expect("missing command").command.clone();
     assert_eq!(got_cmd, cmd, "command mismatch");
 }
 
@@ -257,18 +246,12 @@ fn check_started_job(status: &JobStatus, cmd: &[String]) {
 
 fn check_stopped_job(status: &JobStatus, expected_id: &str, cmd: &[String]) {
     check_job(status, cmd);
-    assert_eq!(
-        status.id.as_ref().expect("missing id").uuid,
-        expected_id,
-        "id mismatch"
-    );
+    assert_eq!(status.id.as_ref().expect("missing id").uuid, expected_id, "id mismatch");
     let stopped = get_stopped(status).expect("should be stopped");
-    assert!(is_recent(
-        stopped.stopped.as_ref().expect("missing stopped timestamp")
-    ));
+    assert!(is_recent(stopped.stopped.as_ref().expect("missing stopped timestamp")));
     let started = status.started.as_ref().expect("missing started");
-    let started_ts = SystemTime::UNIX_EPOCH
-        + Duration::new(started.seconds as u64, started.nanos as u32);
+    let started_ts =
+        SystemTime::UNIX_EPOCH + Duration::new(started.seconds as u64, started.nanos as u32);
     let stopped_ts = SystemTime::UNIX_EPOCH
         + Duration::new(
             stopped.stopped.as_ref().unwrap().seconds as u64,
@@ -296,16 +279,9 @@ async fn test_auth() {
     ];
 
     for (client_secret, server_secret, want_ok) in tests {
-        let server_secret_opt = if server_secret.is_empty() {
-            None
-        } else {
-            Some(server_secret.to_string())
-        };
-        let client_secret_opt = if client_secret.is_empty() {
-            None
-        } else {
-            Some(client_secret)
-        };
+        let server_secret_opt =
+            if server_secret.is_empty() { None } else { Some(server_secret.to_string()) };
+        let client_secret_opt = if client_secret.is_empty() { None } else { Some(client_secret) };
 
         let mut server = TestServer::start(server_secret_opt.clone()).await;
         let port = server.port();
@@ -319,7 +295,10 @@ async fn test_auth() {
                 // Connection failed (e.g. TLS mismatch between client and server).
                 // This counts as failure.
                 if want_ok {
-                    panic!("expected success for client={:?} server={:?} but connection failed", client_secret, server_secret);
+                    panic!(
+                        "expected success for client={:?} server={:?} but connection failed",
+                        client_secret, server_secret
+                    );
                 }
                 drop(server);
                 continue;
@@ -360,10 +339,7 @@ async fn test_short() {
 
     // Poll until the job finishes instead of sleeping a fixed duration.
     let st2 = loop {
-        let s = client
-            .get_status(&job_id)
-            .await
-            .expect("get_status failed");
+        let s = client.get_status(&job_id).await.expect("get_status failed");
         if is_stopped(&s.details) {
             break s;
         }
@@ -394,10 +370,7 @@ async fn test_long() {
     check_started_job(&st1, &long_cmd);
     let job_id = st1.id.as_ref().unwrap().uuid.clone();
 
-    let st2 = client
-        .get_status(&job_id)
-        .await
-        .expect("get_status failed");
+    let st2 = client.get_status(&job_id).await.expect("get_status failed");
     check_started_job(&st2, &long_cmd);
 
     let st3 = client.stop(&job_id).await.expect("stop failed");
@@ -420,41 +393,22 @@ async fn test_logs() {
         "-c".into(),
         "for i in {0..5}; do echo Welcome $i times; sleep 0.1; done".into(),
     ];
-    let st = client
-        .start(logging_cmd.clone())
-        .await
-        .expect("start failed");
+    let st = client.start(logging_cmd.clone()).await.expect("start failed");
     check_started_job(&st, &logging_cmd);
     let job_id = st.id.as_ref().unwrap().uuid.clone();
 
     // Drain logs — expect 6 lines ("Welcome 0 times" through "Welcome 5 times")
-    let req = Request::new(TaskId {
-        uuid: job_id.clone(),
-    });
-    let mut stream = client
-        .inner
-        .logs(req)
-        .await
-        .expect("logs RPC failed")
-        .into_inner();
+    let req = Request::new(TaskId { uuid: job_id.clone() });
+    let mut stream = client.inner.logs(req).await.expect("logs RPC failed").into_inner();
 
     for i in 0..7 {
         let msg = stream.message().await.expect("stream error");
         if i == 6 {
-            assert!(
-                msg.is_none(),
-                "expected end of stream at message 6, got {:?}",
-                msg
-            );
+            assert!(msg.is_none(), "expected end of stream at message 6, got {:?}", msg);
             break;
         }
         let log = msg.expect("missing log message");
-        assert_eq!(
-            log.text,
-            format!("Welcome {} times", i),
-            "log text mismatch at index {}",
-            i
-        );
+        assert_eq!(log.text, format!("Welcome {} times", i), "log text mismatch at index {}", i);
         assert!(
             is_recent(log.timestamp.as_ref().expect("missing timestamp")),
             "timestamp not recent"
@@ -476,17 +430,11 @@ async fn test_parallel() {
         "for i in {0..5}; do echo Welcome $i times; sleep 0.1; done".into(),
     ];
 
-    let st1 = client
-        .start(logging_cmd.clone())
-        .await
-        .expect("start 1 failed");
+    let st1 = client.start(logging_cmd.clone()).await.expect("start 1 failed");
     check_started_job(&st1, &logging_cmd);
     let id1 = st1.id.as_ref().unwrap().uuid.clone();
 
-    let st2 = client
-        .start(logging_cmd.clone())
-        .await
-        .expect("start 2 failed");
+    let st2 = client.start(logging_cmd.clone()).await.expect("start 2 failed");
     check_started_job(&st2, &logging_cmd);
     let id2 = st2.id.as_ref().unwrap().uuid.clone();
 
@@ -495,10 +443,7 @@ async fn test_parallel() {
     let mut client1 = TestClient::connect(port, false, None).await.expect("connect failed");
     let mut client2 = TestClient::connect(port, false, None).await.expect("connect failed");
 
-    let (r1, r2) = tokio::join!(
-        drain_logs(&mut client1, &id1),
-        drain_logs(&mut client2, &id2),
-    );
+    let (r1, r2) = tokio::join!(drain_logs(&mut client1, &id1), drain_logs(&mut client2, &id2),);
     r1.expect("drain 1 failed");
     r2.expect("drain 2 failed");
 
@@ -524,10 +469,7 @@ async fn test_list() {
     let jobs = client.list().await.expect("list failed");
     assert_eq!(jobs.len(), 2, "expected 2 jobs in list");
 
-    let ids: Vec<&str> = jobs
-        .iter()
-        .map(|j| j.id.as_ref().unwrap().uuid.as_str())
-        .collect();
+    let ids: Vec<&str> = jobs.iter().map(|j| j.id.as_ref().unwrap().uuid.as_str()).collect();
     assert!(ids.contains(&id1.as_str()), "list missing job 1");
     assert!(ids.contains(&id2.as_str()), "list missing job 2");
 
@@ -538,10 +480,7 @@ async fn test_list() {
     // (it may also have been removed if it completed and was stopped by
     // the background task — but it was never explicitly stopped, so it
     // stays in the map).
-    assert!(
-        jobs_after.len() <= 2,
-        "unexpected number of jobs after stop"
-    );
+    assert!(jobs_after.len() <= 2, "unexpected number of jobs after stop");
 
     server.shutdown().await;
 }
@@ -549,8 +488,8 @@ async fn test_list() {
 /// Verify that jobs started with resource limits do not crash.
 #[tokio::test]
 async fn test_resource_limits() {
-    use teleport::service::RemoteExecutorImp;
     use teleport::protocol::remote_executor_server::RemoteExecutorServer;
+    use teleport::service::RemoteExecutorImp;
 
     let imp = RemoteExecutorImp::new(Some(teleport::service::LimitsConfig {
         cpu_seconds: 60,
@@ -561,8 +500,7 @@ async fn test_resource_limits() {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("failed to bind");
     let port = listener.local_addr().unwrap().port();
 
-    let router =
-        Server::builder().add_service(RemoteExecutorServer::new(imp));
+    let router = Server::builder().add_service(RemoteExecutorServer::new(imp));
 
     let handle = tokio::spawn(async move {
         tokio::select! {
@@ -605,13 +543,8 @@ async fn test_resource_limits() {
     let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
 }
 
-async fn drain_logs(
-    client: &mut TestClient,
-    id: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let req = Request::new(TaskId {
-        uuid: id.to_string(),
-    });
+async fn drain_logs(client: &mut TestClient, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let req = Request::new(TaskId { uuid: id.to_string() });
     let mut stream = client.inner.logs(req).await?.into_inner();
 
     for i in 0..7 {
