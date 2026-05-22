@@ -1,9 +1,9 @@
 #![allow(unused_variables)]
 
-use super::job::Job;
-use super::jobs::Jobs;
-use super::protocol::remote_executor_server::RemoteExecutor;
-use super::protocol::{
+use crate::job::Job;
+use crate::jobs::Jobs;
+use crate::protocol::remote_executor_server::RemoteExecutor;
+use crate::protocol::{
     Command, JobList, JobStatus, Log, PendingJobStatus, StoppedJobStatus, TaskId, job_status,
 };
 use prost_types::Timestamp;
@@ -73,6 +73,16 @@ impl RemoteExecutor for RemoteExecutorImp {
         let task_id = req.into_inner();
         let uuid = parse_uuid(&task_id)?;
 
+        // Collect job metadata before stopping (stop removes the job from the map).
+        let job = self
+            .jobs
+            .find(&uuid)
+            .await
+            .ok_or_else(|| tonic::Status::not_found("Job not found"))?;
+        let started = job.started;
+        let command = job.command.clone();
+        let logs = job.log_count().await;
+
         let final_status = self
             .jobs
             .stop(&uuid)
@@ -80,18 +90,20 @@ impl RemoteExecutor for RemoteExecutorImp {
             .ok_or_else(|| tonic::Status::not_found("Job not found"))?;
 
         let status = match final_status {
-            super::job::JobStatusEnum::Stopped {
+            crate::job::JobStatusEnum::Stopped {
                 exit_code,
                 stopped_at,
             } => JobStatus {
                 id: Some(TaskId {
                     uuid: uuid.to_string(),
                 }),
+                started: Some(system_time_to_proto(started)),
+                logs,
+                command: Some(Command { command }),
                 details: Some(job_status::Details::Stopped(StoppedJobStatus {
                     error_code: exit_code,
                     stopped: Some(system_time_to_proto(stopped_at)),
                 })),
-                ..Default::default()
             },
             _ => {
                 return Err(tonic::Status::internal(
@@ -157,14 +169,14 @@ impl RemoteExecutor for RemoteExecutorImp {
         let logs = job.log_count().await;
 
         let details = match status {
-            super::job::JobStatusEnum::Running => {
+            crate::job::JobStatusEnum::Running => {
                 let pending = job.pending_status().await.unwrap_or(PendingJobStatus {
                     cpu_perc: 0.0,
                     memory: 0.0,
                 });
                 job_status::Details::Pending(pending)
             }
-            super::job::JobStatusEnum::Stopped {
+            crate::job::JobStatusEnum::Stopped {
                 exit_code,
                 stopped_at,
             } => job_status::Details::Stopped(StoppedJobStatus {
@@ -198,14 +210,14 @@ impl RemoteExecutor for RemoteExecutorImp {
             let logs = job.log_count().await;
 
             let details = match status {
-                super::job::JobStatusEnum::Running => {
+                crate::job::JobStatusEnum::Running => {
                     let pending = job.pending_status().await.unwrap_or(PendingJobStatus {
                         cpu_perc: 0.0,
                         memory: 0.0,
                     });
                     job_status::Details::Pending(pending)
                 }
-                super::job::JobStatusEnum::Stopped {
+                crate::job::JobStatusEnum::Stopped {
                     exit_code,
                     stopped_at,
                 } => job_status::Details::Stopped(StoppedJobStatus {

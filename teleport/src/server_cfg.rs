@@ -1,4 +1,4 @@
-use super::utils::open_cfg_file;
+use teleport::utils::open_cfg_file;
 use clap::Parser;
 use serde::Deserialize;
 use serde_yaml::from_reader;

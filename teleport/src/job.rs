@@ -29,6 +29,9 @@ pub struct Job {
     pub started: Instant,
     /// The tokio process handle. Wrapped in Option so `stop()` can take ownership.
     child: Mutex<Option<Child>>,
+    /// The OS process ID, stored separately so we can kill the process even
+    /// after the Child handle has been taken by the background wait task.
+    pid: Option<u32>,
     /// Current job status.
     status: RwLock<JobStatusEnum>,
     /// Cached log entries from both stdout and stderr.
@@ -66,11 +69,13 @@ impl Job {
 
         let stdout = child.stdout.take().expect("stdout not piped");
         let stderr = child.stderr.take().expect("stderr not piped");
+        let pid = child.id();
 
         let job = Arc::new(Job {
             command,
             started: Instant::now(),
             child: Mutex::new(Some(child)),
+            pid,
             status: RwLock::new(JobStatusEnum::Running),
             logs: Mutex::new(Vec::new()),
             notify: Notify::new(),
@@ -162,8 +167,24 @@ impl Job {
 
             final_status
         } else {
-            // Already stopped — return current status
-            self.status.read().await.clone()
+            // Child was already taken (by background wait task or previous stop).
+            // Kill the process by PID if we have one, then wait for the status.
+            if let Some(pid) = self.pid {
+                // Send SIGKILL to the process — the background wait task will
+                // pick up the exit and update the status.
+                unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+            }
+
+            // Wait for the status to transition to Stopped.
+            loop {
+                let status = self.status.read().await.clone();
+                if let JobStatusEnum::Stopped { .. } = status {
+                    return status;
+                }
+                drop(status);
+                // Wait for the background task to update the status
+                self.notify.notified().await;
+            }
         }
     }
 

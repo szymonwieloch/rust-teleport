@@ -1,13 +1,10 @@
 mod client_cfg;
-mod protocol;
-mod utils;
 
-use protocol::job_status;
-use protocol::remote_executor_client::RemoteExecutorClient;
-use protocol::{Command, TaskId};
-use tonic::transport::Channel;
-
+use teleport::protocol::job_status;
+use teleport::protocol::remote_executor_client::RemoteExecutorClient;
+use teleport::protocol::{Command, TaskId};
 use client_cfg::{Log, Start, Status, Stop, SubCommand, parse_config};
+use tonic::transport::Channel;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -151,8 +148,8 @@ async fn send_log(
 
     while let Some(log) = stream.message().await? {
         let prefix = match log.src() {
-            protocol::LogSource::LsStdout => "\x1b[32mstdout\x1b[0m".to_string(),
-            protocol::LogSource::LsStderr => "\x1b[31mstderr\x1b[0m".to_string(),
+            teleport::protocol::LogSource::LsStdout => "\x1b[32mstdout\x1b[0m".to_string(),
+            teleport::protocol::LogSource::LsStderr => "\x1b[31mstderr\x1b[0m".to_string(),
         };
         println!("[{}] {}", prefix, log.text);
     }

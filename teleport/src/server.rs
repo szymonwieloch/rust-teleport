@@ -1,18 +1,11 @@
-mod job;
-mod jobs;
-mod protocol;
 mod server_cfg;
-mod service;
-mod utils;
 
-use service::RemoteExecutorImp;
+use teleport::service::RemoteExecutorImp;
+use teleport::protocol::remote_executor_server::RemoteExecutorServer;
+use server_cfg::parse_config;
 use std::fs;
 use tonic::Status;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
-
-use protocol::remote_executor_server::RemoteExecutorServer;
-
-use server_cfg::parse_config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
